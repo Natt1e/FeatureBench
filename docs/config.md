@@ -75,7 +75,8 @@ SAVE_COMPLETIONS = false      # Optional: whether to save LLM completions (true/
 INFER_LOG_RENDER_MODE = "compact" # Optional: compact|full for infer.log rendering
 
 LLM_REASONING_EFFORT = ""     # Optional: Reasoning effort for OpenAI o-series models
-LLM_SEND_REASONING_CONTENT = false # Optional: true to send prior assistant reasoning_content in history
+LLM_NATIVE_TOOL_CALLING = ""  # Optional: true/false to force OpenHands native tool calling; empty uses OpenHands default
+LLM_SEND_REASONING_CONTENT = "" # Optional: true to send prior assistant reasoning_content in history
 OPENHANDS_MAX_ITERATIONS = "" # Optional: OpenHands agent max iterations (step limit). Upstream default is 500.
 
 ```

@@ -128,7 +128,11 @@ flags can override metadata (see the argument list below).
 ### OpenHands Only
 
 - `--native-tool-calling`  
-  Force native tool calling (`LLM_NATIVE_TOOL_CALLING=true`).  
+  Force native tool calling on (`LLM_NATIVE_TOOL_CALLING=true`).  
+  Resume mode: ignored (uses metadata).
+
+- `--no-native-tool-calling`  
+  Force native tool calling off (`LLM_NATIVE_TOOL_CALLING=false`).  
   Resume mode: ignored (uses metadata).
 
 - `--send-reasoning-content`  

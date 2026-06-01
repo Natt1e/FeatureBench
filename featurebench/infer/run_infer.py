@@ -330,13 +330,14 @@ class InferenceRunner:
         _apply_override("--base-url", config.base_url, base_url_map)
         _apply_override("--version", config.version, version_map)
 
-        # Force native tool calling for OpenHands when requested.
+        # Configure native tool calling for OpenHands. CLI overrides config.toml;
+        # when CLI is unset, keep any non-empty LLM_NATIVE_TOOL_CALLING from config.
         if config.agent == "openhands":
-            if getattr(config, "force_native_tool_calling", False):
+            native_tool_calling = getattr(config, "native_tool_calling", None)
+            if native_tool_calling is True:
                 self.agent_env_vars["LLM_NATIVE_TOOL_CALLING"] = "true"
-            else:
-                # Avoid inheriting config/env values when not forcing.
-                self.agent_env_vars.pop("LLM_NATIVE_TOOL_CALLING", None)
+            elif native_tool_calling is False:
+                self.agent_env_vars["LLM_NATIVE_TOOL_CALLING"] = "false"
 
             if getattr(config, "send_reasoning_content", False):
                 self.agent_env_vars["LLM_SEND_REASONING_CONTENT"] = "true"
@@ -361,10 +362,12 @@ class InferenceRunner:
                 metadata = {}
 
             if config.agent == "openhands":
-                # Force native tool calling in resume mode strictly follows metadata.
-                force_native = bool(metadata.get("force_native_tool_calling"))
-                if force_native:
+                # Native tool calling in resume mode strictly follows metadata.
+                native_tool_calling = metadata.get("native_tool_calling")
+                if native_tool_calling is True:
                     self.agent_env_vars["LLM_NATIVE_TOOL_CALLING"] = "true"
+                elif native_tool_calling is False:
+                    self.agent_env_vars["LLM_NATIVE_TOOL_CALLING"] = "false"
                 else:
                     self.agent_env_vars.pop("LLM_NATIVE_TOOL_CALLING", None)
 
@@ -787,11 +790,15 @@ class InferenceRunner:
         # Persist the *effective* reasoning effort used by the agent (if any).
         openhands_reasoning_effort: Optional[str] = None
         codex_reasoning_effort: Optional[str] = None
+        native_tool_calling: Optional[bool] = None
         send_reasoning_content = False
         if self.config.agent == "openhands":
             raw = self.agent_env_vars.get("LLM_REASONING_EFFORT")
             if raw is not None and str(raw).strip():
                 openhands_reasoning_effort = str(raw).strip()
+            raw = self.agent_env_vars.get("LLM_NATIVE_TOOL_CALLING")
+            if raw is not None and str(raw).strip():
+                native_tool_calling = str(raw).strip().lower() in {"1", "true", "yes", "on"}
             send_reasoning_content = str(
                 self.agent_env_vars.get("LLM_SEND_REASONING_CONTENT", "")
             ).strip().lower() in {"1", "true", "yes", "on"}
@@ -820,7 +827,7 @@ class InferenceRunner:
             level=self.config.level,
             without_interface_descriptions=self.config.without_interface_descriptions,
             white_box=getattr(self.config, "white_box", False),
-            force_native_tool_calling=getattr(self.config, "force_native_tool_calling", False),
+            native_tool_calling=native_tool_calling,
             send_reasoning_content=send_reasoning_content,
             force_timeout=getattr(self.config, "force_timeout", False),
             api_key=self.config.api_key,
@@ -861,8 +868,16 @@ class InferenceRunner:
         if getattr(self.config, "white_box", False):
             self.console.print("[white]Prompt:[/] [yellow]white-box (tests visible)[/]")
         if self.config.agent == "openhands":
-            if getattr(self.config, "force_native_tool_calling", False):
-                self.console.print("[white]Tool calling:[/] [yellow]forced native[/]")
+            native_tool_calling = self.agent_env_vars.get("LLM_NATIVE_TOOL_CALLING")
+            native_tool_calling = (
+                None
+                if native_tool_calling is None or not str(native_tool_calling).strip()
+                else str(native_tool_calling).strip().lower() in {"1", "true", "yes", "on"}
+            )
+            if native_tool_calling is True:
+                self.console.print("[white]Tool calling:[/] [yellow]native forced on[/]")
+            elif native_tool_calling is False:
+                self.console.print("[white]Tool calling:[/] [yellow]native forced off[/]")
             send_reasoning_content = str(
                 self.agent_env_vars.get("LLM_SEND_REASONING_CONTENT", "")
             ).strip().lower() in {"1", "true", "yes", "on"}
@@ -1263,11 +1278,20 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
-    parser.add_argument(
+    native_tool_group = parser.add_mutually_exclusive_group()
+    native_tool_group.add_argument(
         "--native-tool-calling",
         action="store_true",
         help=(
-            "OpenHands only: force native tool calling (sets LLM_NATIVE_TOOL_CALLING=true inside the container). "
+            "OpenHands only: force native tool calling on (sets LLM_NATIVE_TOOL_CALLING=true inside the container). "
+            "In --resume mode, this flag is ignored and the value from run_metadata.json is used."
+        ),
+    )
+    native_tool_group.add_argument(
+        "--no-native-tool-calling",
+        action="store_true",
+        help=(
+            "OpenHands only: force native tool calling off (sets LLM_NATIVE_TOOL_CALLING=false inside the container). "
             "In --resume mode, this flag is ignored and the value from run_metadata.json is used."
         ),
     )
@@ -1391,7 +1415,11 @@ def load_resume_config(resume_dir: Path, args: argparse.Namespace) -> Tuple[Infe
         )
     if getattr(args, "native_tool_calling", False):
         warnings.append(
-            "--native-tool-calling (using 'force_native_tool_calling' from metadata)"
+            "--native-tool-calling (using 'native_tool_calling' from metadata)"
+        )
+    if getattr(args, "no_native_tool_calling", False):
+        warnings.append(
+            "--no-native-tool-calling (using 'native_tool_calling' from metadata)"
         )
     if getattr(args, "send_reasoning_content", False):
         warnings.append(
@@ -1460,8 +1488,8 @@ def load_resume_config(resume_dir: Path, args: argparse.Namespace) -> Tuple[Infe
     # Determine white_box: always use metadata in resume mode.
     white_box = bool(metadata.get("white_box"))
 
-    # Determine force_native_tool_calling: always use metadata in resume mode.
-    force_native_tool_calling = bool(metadata.get("force_native_tool_calling"))
+    # Determine native_tool_calling: always use metadata in resume mode.
+    native_tool_calling = metadata.get("native_tool_calling")
 
     # Determine send_reasoning_content: always use metadata in resume mode.
     send_reasoning_content = bool(metadata.get("send_reasoning_content"))
@@ -1492,7 +1520,7 @@ def load_resume_config(resume_dir: Path, args: argparse.Namespace) -> Tuple[Infe
         split=metadata.get('split'),  # Use split from metadata
         without_interface_descriptions=without_interface_descriptions,
         white_box=white_box,
-        force_native_tool_calling=force_native_tool_calling,
+        native_tool_calling=native_tool_calling,
         send_reasoning_content=send_reasoning_content,
         force_timeout=force_timeout,
         force_rerun_ids=_load_force_rerun_ids(getattr(args, "force_rerun", None)),
@@ -1558,7 +1586,13 @@ def main():
             split=args.split if args.split is not None else "full",
             without_interface_descriptions=bool(getattr(args, "without", False)),
             white_box=bool(getattr(args, "white", False)),
-            force_native_tool_calling=bool(getattr(args, "native_tool_calling", False)),
+            native_tool_calling=(
+                True
+                if getattr(args, "native_tool_calling", False)
+                else False
+                if getattr(args, "no_native_tool_calling", False)
+                else None
+            ),
             send_reasoning_content=bool(getattr(args, "send_reasoning_content", False)),
             force_timeout=bool(getattr(args, "force_timeout", False)),
             force_rerun_ids=_load_force_rerun_ids(getattr(args, "force_rerun", None)),

@@ -560,7 +560,7 @@ echo 'export LLM_LOG_COMPLETIONS_FOLDER=/agent-logs/completions' >> ~/.bashrc
             "LLM_BASE_URL": self.env_vars.get("LLM_BASE_URL"),
             "LLM_API_VERSION": self.env_vars.get("LLM_API_VERSION"),
             "LLM_REASONING_EFFORT": self.env_vars.get("LLM_REASONING_EFFORT"),
-            # Force native tool calling (OpenHands LLMConfig.native_tool_calling via LLM_ env mapping)
+            # Configure native tool calling (OpenHands LLMConfig.native_tool_calling via LLM_ env mapping)
             "LLM_NATIVE_TOOL_CALLING": self.env_vars.get("LLM_NATIVE_TOOL_CALLING"),
             # Force OpenHands SDK to send prior assistant reasoning_content in history.
             "LLM_SEND_REASONING_CONTENT": self.env_vars.get("LLM_SEND_REASONING_CONTENT"),
