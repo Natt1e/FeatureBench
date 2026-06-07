@@ -109,6 +109,14 @@ echo "mini-swe-agent installation complete"
             )
         except Exception:
             pass
+        try:
+            self.cm.copy_from_container(
+                container,
+                "/root/.config/mini-swe-agent/last_mini_run.traj.json",
+                log_dir / "traj.json",
+            )
+        except Exception:
+            pass
         return True
 
     def failure_hook(self, container, log_file: Path) -> None:
@@ -119,6 +127,14 @@ echo "mini-swe-agent installation complete"
                 container,
                 "/agent-logs/mini_swe_agent_output.log",
                 log_dir / "mini_swe_agent_output.log",
+            )
+        except Exception:
+            pass
+        try:
+            self.cm.copy_from_container(
+                container,
+                "/root/.config/mini-swe-agent/last_mini_run.traj.json",
+                log_dir / "traj.json",
             )
         except Exception:
             pass
